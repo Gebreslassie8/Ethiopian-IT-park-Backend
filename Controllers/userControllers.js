@@ -6,8 +6,6 @@ const bcrypt = require("bcryptjs");
 const { updateUserById, deleteUserById ,fetchAllUsers, getFilteredUser,updateUserProfile ,getUserById,
   getUserProfileById,updateUserProfilePicture
 } =require('../Models/userModel.js');
-const {ValidationSchema} =require ("../../Shared/ValidationSchema/SignupValidationSchema.js")
-
 const getAllUsers = async (req, res) => {
   try {
     const rows = await fetchAllUsers();

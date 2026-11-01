@@ -20,11 +20,11 @@ const {
   updateViewCount,
   updateDownloadCount,
   logInteraction,
-searchAndFilterContents,
-getRelatedContentsByTags
+  searchAndFilterContents,
+  getRelatedContentsByTags,
 } = require("../Models/contentModel");
-const generatePreview = require("../Utils/generatePreview"); // Adjust path if needed
-const util = require('util');
+const generatePreview = require("../Utils/generatePreview");
+const util = require("util");
 const unlink = util.promisify(fs.unlink);
 const external_user_id = 26;
 
@@ -57,6 +57,7 @@ async function deleteFileIfExists(filePath) {
     console.error(`Error deleting file ${filePath}:`, error.message);
   }
 }
+
 exports.uploadContent = async (req, res) => {
   const connection = await db.getConnection();
   try {
@@ -77,17 +78,17 @@ exports.uploadContent = async (req, res) => {
       return res.status(400).json({ error: "Invalid category." });
     }
 
-    // Save original file
     const { filePath, fileUrl, fileFormat, previewType, fileSize } = handleFileUpload(file);
 
-    //  Generate preview
     const { path: previewPath, type: previewGeneratedType } = await generatePreview(
       filePath,
       file.originalname,
       file.mimetype
     );
 
-    const relativePreviewPath = previewPath ? path.relative(path.join(__dirname, ".."), previewPath) : null;
+    const relativePreviewPath = previewPath
+      ? path.relative(path.join(__dirname, ".."), previewPath)
+      : null;
 
     const contentData = {
       title,
@@ -108,7 +109,6 @@ exports.uploadContent = async (req, res) => {
     await connection.beginTransaction();
     const contentId = await createContent(contentData, connection);
 
-    // Process tags if provided
     if (tag) {
       const tags = Array.isArray(tag)
         ? tag
@@ -116,14 +116,13 @@ exports.uploadContent = async (req, res) => {
 
       for (const tagName of tags) {
         let tagRecord = await getTagByName(tagName, connection);
-        let tagId = tagRecord?.tag_id || await createTag(tagName, connection);
+        let tagId = tagRecord?.tag_id || (await createTag(tagName, connection));
         await linkContentTag(contentId, tagId, connection);
       }
     }
 
     await connection.commit();
     res.status(201).json({ message: "Content uploaded successfully." });
-
   } catch (error) {
     await connection.rollback();
     console.error("Upload error:", error);
@@ -133,38 +132,37 @@ exports.uploadContent = async (req, res) => {
   }
 };
 
-
 exports.getContents = async (req, res) => {
   try {
     const contents = await fetchContents();
     res.status(200).json(contents);
   } catch (error) {
     console.error("Fetch contents error:", error);
-    res.status(500).json({ error: "Server Error" });
+    res.status(500).json({ error: "Server Error", message: error.message });
   }
 };
+
 exports.getExternalContents = async (req, res) => {
   try {
     const contents = await fetchExternalContents();
     res.status(200).json(contents);
   } catch (error) {
     console.error("Fetch external contents error:", error);
-    res.status(500).json({ error: "Server Error" });
+    res.status(500).json({ error: "Server Error", message: error.message });
   }
 };
-
 
 exports.getContent = async (req, res) => {
   try {
     const { content_id } = req.params;
     const content = await getContentById(content_id);
 
-    if (!content) return res.status(404).json({ error: 'Content not found' });
+    if (!content) return res.status(404).json({ error: "Content not found" });
 
     res.json(content);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: "Server error" });
   }
 };
 
@@ -194,7 +192,7 @@ exports.editContent = async (req, res) => {
     if (tag) {
       tagsArray = Array.isArray(tag)
         ? tag
-        : tag.split(",").map(t => t.trim()).filter(t => t.length > 0);
+        : tag.split(",").map((t) => t.trim()).filter((t) => t.length > 0);
     }
 
     const updatedContentData = {
@@ -208,25 +206,29 @@ exports.editContent = async (req, res) => {
 
     if (req.file) {
       const oldContent = await getContentById(content_id);
-if (oldContent) {
-  // Delete old actual file
-  if (oldContent.file_url) {
-    const oldFilePath = path.join(__dirname, "../uploads/actualFiles", path.basename(oldContent.file_url));
-    deleteFileIfExists(oldFilePath);
-  }
+      if (oldContent) {
+        if (oldContent.file_url) {
+          const oldFilePath = path.join(
+            __dirname,
+            "../uploads/actualFiles",
+            path.basename(oldContent.file_url)
+          );
+          deleteFileIfExists(oldFilePath);
+        }
 
-  // Delete old preview file
-  if (oldContent.preview_path) {
-    
-  const previewFilename = path.basename(oldContent.preview_path); // includes the _preview part
-  const oldPreviewPath = path.join(__dirname, "../uploads/previews", previewFilename);
-  deleteFileIfExists(oldPreviewPath);
-}
+        if (oldContent.preview_path) {
+          const previewFilename = path.basename(oldContent.preview_path);
+          const oldPreviewPath = path.join(
+            __dirname,
+            "../uploads/previews",
+            previewFilename
+          );
+          deleteFileIfExists(oldPreviewPath);
+        }
+      }
 
-}
-
-
-      const { filePath, fileUrl, fileFormat, previewType, fileSize } = handleFileUpload(req.file);
+      const { filePath, fileUrl, fileFormat, previewType, fileSize } =
+        handleFileUpload(req.file);
 
       const { path: previewPath, type: previewGeneratedType } = await generatePreview(
         filePath,
@@ -234,7 +236,9 @@ if (oldContent) {
         req.file.mimetype
       );
 
-      const relativePreviewPath = previewPath ? path.relative(path.join(__dirname, ".."), previewPath) : null;
+      const relativePreviewPath = previewPath
+        ? path.relative(path.join(__dirname, ".."), previewPath)
+        : null;
 
       updatedContentData.file_url = fileUrl;
       updatedContentData.file_format = fileFormat;
@@ -261,16 +265,14 @@ exports.deleteContent = async (req, res) => {
       return res.status(404).json({ error: "Content not found" });
     }
 
-    const baseDirectory = path.join(__dirname, '../uploads');
+    const baseDirectory = path.join(__dirname, "../uploads");
 
-    // Delete actual file
     const absoluteFilePath = path.join(baseDirectory, content.file_url);
     await deleteFileIfExists(absoluteFilePath);
 
-    // Delete preview file
     if (content.preview_path) {
       const previewFilename = path.basename(content.preview_path);
-      const previewFilePath = path.join(baseDirectory, 'previews', previewFilename);
+      const previewFilePath = path.join(baseDirectory, "previews", previewFilename);
       await deleteFileIfExists(previewFilePath);
     }
 
@@ -290,7 +292,7 @@ exports.fetchMostViewedContents = async (req, res) => {
   try {
     const mostViewedContents = await getMostViewedContents();
 
-    const formatted = mostViewedContents.map(item => ({
+    const formatted = mostViewedContents.map((item) => ({
       category: item.category_name,
       views: Number(item.total_views),
     }));
@@ -298,10 +300,9 @@ exports.fetchMostViewedContents = async (req, res) => {
     res.json(formatted);
   } catch (error) {
     console.error("ERROR in fetchMostViewedContents:", error.message);
-    res.status(500).json({ error: 'Failed to fetch most viewed contents' });
+    res.status(500).json({ error: "Failed to fetch most viewed contents" });
   }
 };
-
 
 exports.archiveContent = async (req, res) => {
   try {
@@ -323,14 +324,19 @@ exports.restoreContent = async (req, res) => {
   }
 };
 
-
 exports.getArchivedContents = async (req, res) => {
   try {
     const { search = "", accessLevel, categoryIds = "[]", sortOrder = "newest" } = req.query;
-    const categoryIdArray = JSON.parse(categoryIds);
+    let categoryIdArray = [];
+    try {
+      categoryIdArray = JSON.parse(categoryIds);
+    } catch {
+      categoryIdArray = [];
+    }
+    if (!Array.isArray(categoryIdArray)) categoryIdArray = [];
 
     const contents = await getArchivedContents({
-      search,
+      search: search && search.trim() ? search.trim() : "",
       accessLevel,
       categoryIds: categoryIdArray,
       sortOrder,
@@ -343,16 +349,14 @@ exports.getArchivedContents = async (req, res) => {
   }
 };
 
-
-//  Shared Access Check
 function isAccessDenied(content, user) {
   const isInternalOnly = content.access_level === "internaluser";
   if (isInternalOnly && !user) return { status: 401, message: "Login required" };
-  if (isInternalOnly && user.role === "externaluser") return { status: 403, message: "Access denied" };
+  if (isInternalOnly && user.role === "externaluser")
+    return { status: 403, message: "Access denied" };
   return null;
 }
 
-//  View Content
 exports.viewContent = async (req, res) => {
   const { content_id } = req.params;
   const user_id = req.user?.user_id ?? external_user_id;
@@ -363,22 +367,21 @@ exports.viewContent = async (req, res) => {
     const content = await getContentById(content_id);
     if (!content) return res.status(404).json({ error: "Content not found" });
 
-    //  Enforce strict access control
     const accessIssue = isAccessDenied(content, req.user);
-    if (accessIssue) return res.status(accessIssue.status).json({ message: accessIssue.message });
+    if (accessIssue)
+      return res.status(accessIssue.status).json({ message: accessIssue.message });
 
     const filePath = path.resolve("uploads", content.file_url);
-    if (!fs.existsSync(filePath)) return res.status(404).json({ error: "File not found" });
+    if (!fs.existsSync(filePath))
+      return res.status(404).json({ error: "File not found" });
 
     await updateViewCount(content_id);
     await logInteraction(user_id, content_id, "view");
 
-    // Detect video file by mimetype or extension
-    const videoMimeTypes = ['.mp4', '.webm', '.ogg', '.mov', '.avi', '.mkv'];
+    const videoMimeTypes = [".mp4", ".webm", ".ogg", ".mov", ".avi", ".mkv"];
     const ext = path.extname(filePath).toLowerCase();
 
     if (videoMimeTypes.includes(ext)) {
-      // Stream video with range support
       const stat = fs.statSync(filePath);
       const fileSize = stat.size;
       const range = req.headers.range;
@@ -386,35 +389,33 @@ exports.viewContent = async (req, res) => {
       if (!range) {
         res.writeHead(200, {
           "Content-Length": fileSize,
-          "Content-Type": `video/${ext.replace('.', '')}`,
+          "Content-Type": `video/${ext.replace(".", "")}`,
         });
         fs.createReadStream(filePath).pipe(res);
       } else {
         const parts = range.replace(/bytes=/, "").split("-");
         const start = parseInt(parts[0], 10);
         const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-        const chunkSize = (end - start) + 1;
+        const chunkSize = end - start + 1;
         const file = fs.createReadStream(filePath, { start, end });
         res.writeHead(206, {
           "Content-Range": `bytes ${start}-${end}/${fileSize}`,
           "Accept-Ranges": "bytes",
           "Content-Length": chunkSize,
-          "Content-Type": `video/${ext.replace('.', '')}`,
+          "Content-Type": `video/${ext.replace(".", "")}`,
         });
         file.pipe(res);
       }
       return;
     }
 
-    
-    // For non-video files, fallback to sendFile (images, pdf, etc.)
     res.sendFile(filePath);
   } catch (error) {
     console.error("View error:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 };
-//  Download Content
+
 exports.downloadContent = async (req, res) => {
   const { content_id } = req.params;
   const user_id = req.user?.user_id ?? external_user_id;
@@ -426,10 +427,12 @@ exports.downloadContent = async (req, res) => {
     if (!content) return res.status(404).json({ error: "Content not found" });
 
     const accessIssue = isAccessDenied(content, req.user);
-    if (accessIssue) return res.status(accessIssue.status).json({ message: accessIssue.message });
+    if (accessIssue)
+      return res.status(accessIssue.status).json({ message: accessIssue.message });
 
     const filePath = path.resolve("uploads", content.file_url);
-    if (!fs.existsSync(filePath)) return res.status(404).json({ error: "File not found" });
+    if (!fs.existsSync(filePath))
+      return res.status(404).json({ error: "File not found" });
 
     await updateDownloadCount(content_id);
     await logInteraction(user_id, content_id, "download");
@@ -441,44 +444,49 @@ exports.downloadContent = async (req, res) => {
   }
 };
 
-
-
 exports.searchFilteredContents = async (req, res) => {
-  const { search = "", category = "", accessLevel, sortOrder = "newest" } = req.query;
-  const user = req.user || null; // from optionalAuthMiddleware
-
-  // Determine user role
-  const isExternalUser = !user || user.role === "externaluser";
-
-  // Access control rules
-  if (accessLevel === "internaluser") {
-    if (!user) {
-      return res.status(401).json({ message: "Unauthorized: Please log in to access internal content" });
-    }
-    if (user.role === "externaluser") {
-      return res.status(403).json({ message: "Forbidden: External users cannot access internal content" });
-    }
-  }
-
-  // Only allow "externaluser" access to external contents
-  const filters = {
-    search,
-    accessLevel: accessLevel || (isExternalUser ? "externaluser" : null),
-    categoryIds: category ? category.split(",") : [],
-    sortOrder, // Add sortOrder to the filters
-  };
-
   try {
+    const { search = "", category = "", accessLevel, sortOrder = "newest" } = req.query;
+    const user = req.user || null;
+    const isExternalUser = !user || user.role === "externaluser";
+
+    if (accessLevel === "internaluser") {
+      if (!user) {
+        return res
+          .status(401)
+          .json({ message: "Unauthorized: Please log in to access internal content" });
+      }
+      if (user.role === "externaluser") {
+        return res
+          .status(403)
+          .json({ message: "Forbidden: External users cannot access internal content" });
+      }
+    }
+
+    // ✅ Safely parse category IDs — filters out empty/non-numeric values
+    const categoryIds = String(category || "")
+      .split(",")
+      .map((s) => Number(s.trim()))
+      .filter((n) => Number.isFinite(n) && n > 0);
+
+    const filters = {
+      search: search && search.trim() ? search.trim() : "",
+      accessLevel: accessLevel || (isExternalUser ? "externaluser" : null),
+      categoryIds,
+      sortOrder,
+    };
+
     const results = await searchAndFilterContents(filters);
     res.json(results);
   } catch (error) {
     console.error("Search error:", error);
-    res.status(500).json({ error: "Failed to search contents" });
+    res.status(500).json({
+      error: "Failed to search contents",
+      message: error.message,
+      code: error.code,
+    });
   }
 };
-
-
-
 
 exports.getRelatedContents = async (req, res) => {
   const contentId = req.query.for;
@@ -487,13 +495,13 @@ exports.getRelatedContents = async (req, res) => {
   if (!contentId) return res.status(400).json({ message: "Missing content ID" });
 
   try {
-    const contents = await getRelatedContentsByTags(contentId, isInternal ? "internaluser" : "externaluser");
+    const contents = await getRelatedContentsByTags(
+      contentId,
+      isInternal ? "internaluser" : "externaluser"
+    );
     res.json(contents);
   } catch (err) {
     console.error("Error fetching related contents:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
-
-
-

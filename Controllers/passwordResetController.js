@@ -6,12 +6,16 @@ dotenv.config();
 // Email Transporter Setup
 const transporter = nodemailer.createTransport({
   host: "smtp.gmail.com",
-  port: 465,         // ← changed from 587
-  secure: true,      // ← changed from false
+  port: 465,           // ← 587 → 465
+  secure: true,        // ← false → true
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
+  // Add timeout so it fails fast instead of hanging
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
+  socketTimeout: 15000,
 });
 
 // 1. Request Reset OTP

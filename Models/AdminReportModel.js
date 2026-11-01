@@ -32,7 +32,7 @@ const getContentPerformance = async (page = 1, limit = 10) => {
       ) AS download_completion_rate
     FROM content c
     LEFT JOIN content_user_interaction cui 
-      ON c.content_id = cui.content_id AND cui.action_type = 'view'
+      ON c.content_id = cui.content_id AND cui.interaction_type = 'view'
     WHERE c.status != 'archived'
     GROUP BY c.content_id
     ORDER BY (c.view_count + c.download_count) DESC
@@ -79,9 +79,9 @@ const getRetentionRate = async (page = 1, limit = 10) => {
         NULLIF(COUNT(DISTINCT cui.user_id), 0)) * 100,
         1
       ) AS retention_rate,
-      MAX(cui.interaction_time) AS last_accessed
+      MAX(cui.created_at) AS last_accessed
     FROM content c
-    LEFT JOIN content_user_interaction cui ON c.content_id = cui.content_id AND cui.action_type = 'view'
+    LEFT JOIN content_user_interaction cui ON c.content_id = cui.content_id AND cui.interaction_type = 'view'
     LEFT JOIN (
       SELECT content_id, user_id, COUNT(*) AS view_count
       FROM content_user_interaction
@@ -168,8 +168,8 @@ const getUsers = async (page = 1, limit = 10, actionType = null) => {
     SELECT 
       cui.id,
       u.username,
-      cui.action_type AS action,
-      cui.interaction_time,
+      cui.interaction_type AS action,
+      cui.created_at,
       cui.duration,
       c.title AS content,
       c.content_id
@@ -180,11 +180,11 @@ const getUsers = async (page = 1, limit = 10, actionType = null) => {
   const params = [];
 
   if (actionType) {
-    query += `WHERE cui.action_type = ? `;
+    query += `WHERE cui.interaction_type = ? `;
     params.push(actionType);
   }
 
-  query += `ORDER BY cui.interaction_time DESC LIMIT ? OFFSET ?`;
+  query += `ORDER BY cui.created_at DESC LIMIT ? OFFSET ?`;
   params.push(limit, offset);
 
   const [rows] = await db.query(query, params);
@@ -334,11 +334,11 @@ const getFrequentAccess = async (page = 1, limit = 10) => {
       c.content_id AS id,
       c.title,
       COUNT(cui.id) AS accessCount,
-      MAX(cui.interaction_time) AS lastAccessed,
+      MAX(cui.created_at) AS lastAccessed,
       c.file_format AS contentType
     FROM content c
     LEFT JOIN content_user_interaction cui ON c.content_id = cui.content_id
-    WHERE cui.action_type = 'view'
+    WHERE cui.interaction_type = 'view'
     GROUP BY c.content_id, c.title, c.file_format
     ORDER BY accessCount DESC
     LIMIT ? OFFSET ?
@@ -360,11 +360,11 @@ const getUnderutilized = async (page = 1, limit = 10) => {
       c.content_id AS id,
       c.title,
       COUNT(cui.id) AS accessCount,
-      MAX(cui.interaction_time) AS lastAccessed,
+      MAX(cui.created_at) AS lastAccessed,
       c.file_format AS contentType
     FROM content c
     LEFT JOIN content_user_interaction cui ON c.content_id = cui.content_id
-    WHERE cui.action_type = 'view' OR cui.action_type IS NULL
+    WHERE cui.interaction_type = 'view' OR cui.interaction_type IS NULL
     GROUP BY c.content_id, c.title, c.file_format
     ORDER BY accessCount ASC
     LIMIT ? OFFSET ?
@@ -390,7 +390,7 @@ const getTimeSpent = async (page = 1, limit = 10) => {
       COUNT(DISTINCT cui.user_id) AS users
     FROM content c
     LEFT JOIN content_user_interaction cui ON c.content_id = cui.content_id
-    WHERE cui.action_type = 'view' AND cui.duration IS NOT NULL
+    WHERE cui.interaction_type = 'view' AND cui.duration IS NOT NULL
     GROUP BY c.content_id, c.title
     ORDER BY totalTime DESC
     LIMIT ? OFFSET ?

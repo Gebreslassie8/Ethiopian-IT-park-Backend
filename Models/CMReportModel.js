@@ -93,7 +93,7 @@ const CMReportModel = {
            ) AS download_completion_rate
          FROM content c
          LEFT JOIN content_user_interaction cui 
-           ON c.content_id = cui.content_id AND cui.action_type = 'view'
+           ON c.content_id = cui.content_id AND cui.interaction_type = 'view'
          WHERE c.status != 'archived'
          GROUP BY c.content_id
          ORDER BY c.view_count DESC
@@ -152,9 +152,9 @@ const CMReportModel = {
             NULLIF(COUNT(DISTINCT cui.user_id), 0)) * 100,
             1
           ) AS retention_rate,
-          MAX(cui.interaction_time) AS last_accessed
+          MAX(cui.created_at) AS last_accessed
         FROM content c
-        LEFT JOIN content_user_interaction cui ON c.content_id = cui.content_id AND cui.action_type = 'view'
+        LEFT JOIN content_user_interaction cui ON c.content_id = cui.content_id AND cui.interaction_type = 'view'
         LEFT JOIN (
           SELECT content_id, user_id, COUNT(*) AS view_count
           FROM content_user_interaction
@@ -210,7 +210,7 @@ const CMReportModel = {
            COUNT(DISTINCT cui.user_id) AS users
          FROM content c
          LEFT JOIN content_user_interaction cui 
-           ON c.content_id = cui.content_id AND cui.action_type = 'view'
+           ON c.content_id = cui.content_id AND cui.interaction_type = 'view'
          WHERE c.status != 'archived' AND cui.duration IS NOT NULL
          GROUP BY c.content_id, c.title
          ORDER BY total_duration_seconds DESC
@@ -254,10 +254,10 @@ const CMReportModel = {
            c.content_id AS id, 
            c.title, 
            COALESCE(COUNT(cui.id), 0) AS access_count,
-           MAX(cui.interaction_time) AS last_accessed, 
+           MAX(cui.created_at) AS last_accessed, 
            c.file_format AS content_type
          FROM content c
-         LEFT JOIN content_user_interaction cui ON c.content_id = cui.content_id AND cui.action_type = 'view' 
+         LEFT JOIN content_user_interaction cui ON c.content_id = cui.content_id AND cui.interaction_type = 'view' 
          WHERE c.status != 'archived'
          GROUP BY c.content_id, c.title, c.file_format
          ORDER BY access_count DESC
@@ -294,10 +294,10 @@ const CMReportModel = {
            c.content_id AS id,
            c.title,
            COALESCE(COUNT(cui.id), 0) AS access_count,
-           MAX(cui.interaction_time) AS last_accessed,
+           MAX(cui.created_at) AS last_accessed,
            c.file_format AS content_type
          FROM content c
-         LEFT JOIN content_user_interaction cui ON c.content_id = cui.content_id AND cui.action_type = 'view'
+         LEFT JOIN content_user_interaction cui ON c.content_id = cui.content_id AND cui.interaction_type = 'view'
          WHERE c.status != 'archived'
          GROUP BY c.content_id, c.title, c.file_format
          HAVING access_count <= 10
@@ -322,7 +322,7 @@ const CMReportModel = {
         `SELECT COUNT(*) AS count FROM (
           SELECT c.content_id
           FROM content c
-          LEFT JOIN content_user_interaction cui ON c.content_id = cui.content_id AND cui.action_type = 'view'
+          LEFT JOIN content_user_interaction cui ON c.content_id = cui.content_id AND cui.interaction_type = 'view'
           WHERE c.status != 'archived'
           GROUP BY c.content_id
           HAVING COUNT(cui.id) <= 10

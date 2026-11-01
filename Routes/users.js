@@ -9,7 +9,8 @@ const upload = require("../Middlewares/uploadMiddleware");
 router.post('/register', register);
 router.post('/login', login);
 router.get('/users', getAllUsers);
-router.get("/", getAllUsers);`nrouter.get("/filter", getFilteredUsers);
+router.get("/", getAllUsers);
+router.get("/filter", getFilteredUsers);
 
 
 router.put('/edit/:user_id', editUser);

@@ -40,7 +40,7 @@ const handleFileUpload = (file) => {
   fs.writeFileSync(filePath, file.buffer);
   return {
     filePath,
-    fileUrl: path.relative(__dirname, filePath),
+    fileUrl: path.relative(path.join(__dirname, ".."), filePath),
     fileFormat: path.extname(file.originalname),
     previewType: file.mimetype,
     fileSize: file.size,
@@ -80,11 +80,15 @@ exports.uploadContent = async (req, res) => {
 
     const { filePath, fileUrl, fileFormat, previewType, fileSize } = handleFileUpload(file);
 
-    const { path: previewPath, type: previewGeneratedType } = await generatePreview(
-      filePath,
-      file.originalname,
-      file.mimetype
-    );
+    let previewPath = null;
+    let previewGeneratedType = null;
+    try {
+      const previewResult = await generatePreview(filePath, file.originalname, file.mimetype);
+      previewPath = previewResult.path;
+      previewGeneratedType = previewResult.type;
+    } catch (previewErr) {
+      console.warn("Preview generation skipped:", previewErr.message);
+    }
 
     const relativePreviewPath = previewPath
       ? path.relative(path.join(__dirname, ".."), previewPath)
@@ -230,11 +234,15 @@ exports.editContent = async (req, res) => {
       const { filePath, fileUrl, fileFormat, previewType, fileSize } =
         handleFileUpload(req.file);
 
-      const { path: previewPath, type: previewGeneratedType } = await generatePreview(
-        filePath,
-        req.file.originalname,
-        req.file.mimetype
-      );
+      let previewPath = null;
+      let previewGeneratedType = null;
+      try {
+        const previewResult = await generatePreview(filePath, req.file.originalname, req.file.mimetype);
+        previewPath = previewResult.path;
+        previewGeneratedType = previewResult.type;
+      } catch (previewErr) {
+        console.warn("Preview generation skipped:", previewErr.message);
+      }
 
       const relativePreviewPath = previewPath
         ? path.relative(path.join(__dirname, ".."), previewPath)
@@ -371,7 +379,7 @@ exports.viewContent = async (req, res) => {
     if (accessIssue)
       return res.status(accessIssue.status).json({ message: accessIssue.message });
 
-    const filePath = path.resolve("uploads", content.file_url);
+    const filePath = path.join(__dirname, "..", content.file_url);
     if (!fs.existsSync(filePath))
       return res.status(404).json({ error: "File not found" });
 
@@ -430,7 +438,7 @@ exports.downloadContent = async (req, res) => {
     if (accessIssue)
       return res.status(accessIssue.status).json({ message: accessIssue.message });
 
-    const filePath = path.resolve("uploads", content.file_url);
+    const filePath = path.join(__dirname, "..", content.file_url);
     if (!fs.existsSync(filePath))
       return res.status(404).json({ error: "File not found" });
 

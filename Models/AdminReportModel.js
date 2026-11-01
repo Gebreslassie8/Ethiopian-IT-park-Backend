@@ -217,8 +217,8 @@ const getUsers = async (page = 1, limit = 10, actionType = null) => {
       action: row.action.charAt(0).toUpperCase() + row.action.slice(1),
       content: row.content || 'Unknown',
       content_id: row.content_id,
-      created_at: row.interaction_time ? 
-        new Date(row.interaction_time).toLocaleString() : 
+      created_at: row.created_at ? 
+        new Date(row.created_at).toLocaleString() : 
         'Unknown',
       duration: durationText,
       raw_duration: row.duration // Keep raw value for sorting/filtering

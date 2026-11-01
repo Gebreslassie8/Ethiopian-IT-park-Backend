@@ -58,7 +58,7 @@ exports.getUnderutilizedContents = async () => {
       ANY_VALUE(c.title) AS title,
       ANY_VALUE(c.author) AS creator,
       ANY_VALUE(cat.name) AS category,
-      COUNT(cui.id) AS interaction_count
+      COUNT(cui.interaction_id) AS interaction_count
     FROM content c
     LEFT JOIN content_user_interaction cui 
       ON c.content_id = cui.content_id 

@@ -85,7 +85,7 @@ const getRetentionRate = async (page = 1, limit = 10) => {
     LEFT JOIN (
       SELECT content_id, user_id, COUNT(*) AS view_count
       FROM content_user_interaction
-      WHERE action_type = 'view'
+      WHERE interaction_type = 'view'
       GROUP BY content_id, user_id
     ) AS user_view_counts ON c.content_id = user_view_counts.content_id AND cui.user_id = user_view_counts.user_id
     WHERE c.status != 'archived'
@@ -166,7 +166,7 @@ const getUsers = async (page = 1, limit = 10, actionType = null) => {
   const { offset } = paginate(page, limit);
   let query = `
     SELECT 
-      cui.id,
+      cui.interaction_id,
       u.username,
       cui.interaction_type AS action,
       cui.created_at,
@@ -217,7 +217,7 @@ const getUsers = async (page = 1, limit = 10, actionType = null) => {
       action: row.action.charAt(0).toUpperCase() + row.action.slice(1),
       content: row.content || 'Unknown',
       content_id: row.content_id,
-      interaction_time: row.interaction_time ? 
+      created_at: row.interaction_time ? 
         new Date(row.interaction_time).toLocaleString() : 
         'Unknown',
       duration: durationText,
@@ -231,7 +231,7 @@ const getUsersCount = async (actionType = null) => {
   const params = [];
 
   if (actionType) {
-    query += ` WHERE action_type = ?`;
+    query += ` WHERE interaction_type = ?`;
     params.push(actionType);
   }
 
@@ -333,7 +333,7 @@ const getFrequentAccess = async (page = 1, limit = 10) => {
     SELECT 
       c.content_id AS id,
       c.title,
-      COUNT(cui.id) AS accessCount,
+      COUNT(cui.interaction_id) AS accessCount,
       MAX(cui.created_at) AS lastAccessed,
       c.file_format AS contentType
     FROM content c
@@ -359,7 +359,7 @@ const getUnderutilized = async (page = 1, limit = 10) => {
     SELECT 
       c.content_id AS id,
       c.title,
-      COUNT(cui.id) AS accessCount,
+      COUNT(cui.interaction_id) AS accessCount,
       MAX(cui.created_at) AS lastAccessed,
       c.file_format AS contentType
     FROM content c
@@ -431,7 +431,7 @@ const getActivityStats = async () => {
     const [[{ engagedUsers }]] = await db.query(`
       SELECT COUNT(DISTINCT user_id) AS engagedUsers 
       FROM content_user_interaction 
-      WHERE interaction_time >= DATE_SUB(NOW(), INTERVAL 1 DAY)
+      WHERE created_at >= DATE_SUB(NOW(), INTERVAL 1 DAY)
     `);
 
     const [[{ newContent }]] = await db.query(`

@@ -171,7 +171,7 @@ exports.updateDownloadCount = async (content_id) => {
   );
 };
 
-exports.logInteraction = async (user_id, content_id, action_type) => {
+exports.logInteraction = async (user_id, content_id, interaction_type) => {
   const durations = { view: 30, download: 10 };
 
   const [contentRows] = await db.query(
@@ -184,13 +184,13 @@ exports.logInteraction = async (user_id, content_id, action_type) => {
 
   await db.query(
     `INSERT INTO content_user_interaction 
-     (user_id, content_id, interaction_time, duration, action_type) 
+     (user_id, content_id, created_at, duration, interaction_type) 
      VALUES (?, ?, NOW(), ?, ?)`,
     [
       user_id || EXTERNAL_USER_ID,
       content_id,
-      durations[action_type] || 0,
-      action_type,
+      durations[interaction_type] || 0,
+      interaction_type,
     ]
   );
 };

@@ -158,7 +158,7 @@ const CMReportModel = {
         LEFT JOIN (
           SELECT content_id, user_id, COUNT(*) AS view_count
           FROM content_user_interaction
-          WHERE action_type = 'view'
+          WHERE interaction_type = 'view'
           GROUP BY content_id, user_id
         ) AS user_view_counts ON c.content_id = user_view_counts.content_id AND cui.user_id = user_view_counts.user_id
         WHERE c.status != 'archived'
@@ -253,7 +253,7 @@ const CMReportModel = {
         `SELECT 
            c.content_id AS id, 
            c.title, 
-           COALESCE(COUNT(cui.id), 0) AS access_count,
+           COALESCE(COUNT(cui.interaction_id), 0) AS access_count,
            MAX(cui.created_at) AS last_accessed, 
            c.file_format AS content_type
          FROM content c
@@ -293,7 +293,7 @@ const CMReportModel = {
         `SELECT 
            c.content_id AS id,
            c.title,
-           COALESCE(COUNT(cui.id), 0) AS access_count,
+           COALESCE(COUNT(cui.interaction_id), 0) AS access_count,
            MAX(cui.created_at) AS last_accessed,
            c.file_format AS content_type
          FROM content c
@@ -325,7 +325,7 @@ const CMReportModel = {
           LEFT JOIN content_user_interaction cui ON c.content_id = cui.content_id AND cui.interaction_type = 'view'
           WHERE c.status != 'archived'
           GROUP BY c.content_id
-          HAVING COUNT(cui.id) <= 10
+          HAVING COUNT(cui.interaction_id) <= 10
         ) AS subquery`
       );
       return rows[0].count;

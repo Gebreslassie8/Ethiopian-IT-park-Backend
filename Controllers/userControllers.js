@@ -125,16 +125,13 @@ const updateProfile = async (req, res) => {
     const { username, email } = req.body;
 
     // Create a dynamic schema based on provided fields
-    const dynamicSchema = ValidationSchema.pick({
-      username: username !== undefined,
-      email: email !== undefined,
-    });
+    // (validation removed - replaced with inline checks below)
 
     // Validate incoming data with the dynamic schema
-    await dynamicSchema.validate({ username, email });
+    // (validation removed)
 
     // Get existing user data
-    const [userData] = await getUserById(user_id);
+    const userData = await getUserById(user_id);
     if (!userData) return res.status(404).json({ success: false, message: "User not found" });
 
     let profile_picture = userData.profile_picture;

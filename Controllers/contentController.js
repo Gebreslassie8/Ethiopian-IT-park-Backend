@@ -28,14 +28,16 @@ const util = require("util");
 const unlink = util.promisify(fs.unlink);
 const external_user_id = 26;
 
+// ✅ FIX: Use timestamp-prefixed unique filenames — no more "file already exists"
 const handleFileUpload = (file) => {
   const uploadDir = path.join(__dirname, "../uploads/actualFiles");
-  if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
-
-  const filePath = path.join(uploadDir, file.originalname);
-  if (fs.existsSync(filePath)) {
-    throw new Error("A file with the same name already exists.");
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
   }
+
+  const safeName = file.originalname.replace(/[^\w.\-() ]/g, "_");
+  const uniqueName = `${Date.now()}-${safeName}`;
+  const filePath = path.join(uploadDir, uniqueName);
 
   fs.writeFileSync(filePath, file.buffer);
   return {
@@ -128,9 +130,15 @@ exports.uploadContent = async (req, res) => {
     await connection.commit();
     res.status(201).json({ message: "Content uploaded successfully." });
   } catch (error) {
-    await connection.rollback();
+    try { await connection.rollback(); } catch (_) {}
     console.error("Upload error:", error);
-    res.status(500).json({ error: "Failed to upload content." });
+    // ✅ Expose real error for debugging
+    res.status(500).json({
+      error: "Failed to upload content.",
+      message: error?.message,
+      code: error?.code,
+      sqlMessage: error?.sqlMessage,
+    });
   } finally {
     connection.release();
   }
@@ -160,9 +168,7 @@ exports.getContent = async (req, res) => {
   try {
     const { content_id } = req.params;
     const content = await getContentById(content_id);
-
     if (!content) return res.status(404).json({ error: "Content not found" });
-
     res.json(content);
   } catch (error) {
     console.error(error);
@@ -178,7 +184,6 @@ exports.editContent = async (req, res) => {
     if (!content_id) {
       return res.status(400).json({ error: "Content ID is required" });
     }
-
     if (!req.body) {
       return res.status(400).json({ error: "Request body is missing" });
     }
@@ -187,7 +192,6 @@ exports.editContent = async (req, res) => {
     if (!categoryData) {
       return res.status(400).json({ error: "Invalid category name" });
     }
-
     if (!access_level) {
       return res.status(400).json({ error: "Access level is required" });
     }
@@ -212,21 +216,11 @@ exports.editContent = async (req, res) => {
       const oldContent = await getContentById(content_id);
       if (oldContent) {
         if (oldContent.file_url) {
-          const oldFilePath = path.join(
-            __dirname,
-            "../uploads/actualFiles",
-            path.basename(oldContent.file_url)
-          );
+          const oldFilePath = path.join(__dirname, "..", oldContent.file_url);
           deleteFileIfExists(oldFilePath);
         }
-
         if (oldContent.preview_path) {
-          const previewFilename = path.basename(oldContent.preview_path);
-          const oldPreviewPath = path.join(
-            __dirname,
-            "../uploads/previews",
-            previewFilename
-          );
+          const oldPreviewPath = path.join(__dirname, "..", oldContent.preview_path);
           deleteFileIfExists(oldPreviewPath);
         }
       }
@@ -256,11 +250,10 @@ exports.editContent = async (req, res) => {
     }
 
     await updateContent(content_id, updatedContentData);
-
     res.status(200).json({ message: "Content updated successfully" });
   } catch (error) {
     console.error("Edit content error:", error);
-    res.status(500).json({ error: "Server Error" });
+    res.status(500).json({ error: "Server Error", message: error.message });
   }
 };
 
@@ -273,14 +266,12 @@ exports.deleteContent = async (req, res) => {
       return res.status(404).json({ error: "Content not found" });
     }
 
-    const baseDirectory = path.join(__dirname, "../uploads");
-
-    const absoluteFilePath = path.join(baseDirectory, content.file_url);
-    await deleteFileIfExists(absoluteFilePath);
-
+    if (content.file_url) {
+      const absoluteFilePath = path.join(__dirname, "..", content.file_url);
+      await deleteFileIfExists(absoluteFilePath);
+    }
     if (content.preview_path) {
-      const previewFilename = path.basename(content.preview_path);
-      const previewFilePath = path.join(baseDirectory, "previews", previewFilename);
+      const previewFilePath = path.join(__dirname, "..", content.preview_path);
       await deleteFileIfExists(previewFilePath);
     }
 
@@ -292,19 +283,17 @@ exports.deleteContent = async (req, res) => {
     res.status(200).json({ message: "Content and preview deleted successfully" });
   } catch (error) {
     console.error("Delete content error:", error);
-    res.status(500).json({ error: "Server Error" });
+    res.status(500).json({ error: "Server Error", message: error.message });
   }
 };
 
 exports.fetchMostViewedContents = async (req, res) => {
   try {
     const mostViewedContents = await getMostViewedContents();
-
     const formatted = mostViewedContents.map((item) => ({
       category: item.category_name,
       views: Number(item.total_views),
     }));
-
     res.json(formatted);
   } catch (error) {
     console.error("ERROR in fetchMostViewedContents:", error.message);
@@ -445,7 +434,7 @@ exports.downloadContent = async (req, res) => {
     await updateDownloadCount(content_id);
     await logInteraction(user_id, content_id, "download");
 
-    res.download(filePath, content.file_url);
+    res.download(filePath, path.basename(content.file_url));
   } catch (error) {
     console.error("Download error:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -460,18 +449,13 @@ exports.searchFilteredContents = async (req, res) => {
 
     if (accessLevel === "internaluser") {
       if (!user) {
-        return res
-          .status(401)
-          .json({ message: "Unauthorized: Please log in to access internal content" });
+        return res.status(401).json({ message: "Unauthorized: Please log in to access internal content" });
       }
       if (user.role === "externaluser") {
-        return res
-          .status(403)
-          .json({ message: "Forbidden: External users cannot access internal content" });
+        return res.status(403).json({ message: "Forbidden: External users cannot access internal content" });
       }
     }
 
-    // ✅ Safely parse category IDs — filters out empty/non-numeric values
     const categoryIds = String(category || "")
       .split(",")
       .map((s) => Number(s.trim()))

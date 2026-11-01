@@ -42,8 +42,8 @@ exports.getFrequentlyAccessedContents = async () => {
     FROM content_user_interaction cui
     JOIN content c ON c.content_id = cui.content_id
     JOIN categories cat ON c.category_id = cat.category_id
-    WHERE cui.action_type IN ('view', 'download')
-      AND cui.interaction_time >= NOW() - INTERVAL 30 DAY
+    WHERE cui.interaction_type IN ('view', 'download')
+      AND cui.created_at >= NOW() - INTERVAL 30 DAY
     GROUP BY c.content_id
     ORDER BY interaction_count DESC
     LIMIT 7
@@ -62,7 +62,7 @@ exports.getUnderutilizedContents = async () => {
     FROM content c
     LEFT JOIN content_user_interaction cui 
       ON c.content_id = cui.content_id 
-      AND cui.interaction_time >= NOW() - INTERVAL 30 DAY
+      AND cui.created_at >= NOW() - INTERVAL 30 DAY
     JOIN categories cat ON c.category_id = cat.category_id
     GROUP BY c.content_id
     HAVING interaction_count <= 2

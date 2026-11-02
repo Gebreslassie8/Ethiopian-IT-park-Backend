@@ -1,50 +1,48 @@
 const PasswordReset = require("../Models/passwordResetModel");
-const nodemailer = require("nodemailer");
 const dotenv = require("dotenv");
 dotenv.config();
 
-// ─── Email Transporter Setup ─────────────────────────────
-// Uses port 465 (SSL) — works on Render where port 587 is blocked
-const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 465,
-  secure: true,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-  // Fail fast instead of hanging (avoids 502 Bad Gateway on Render)
-  connectionTimeout: 15000,
-  greetingTimeout: 15000,
-  socketTimeout: 20000,
-});
+const BREVO_API_KEY = process.env.BREVO_API_KEY;
+const SENDER_EMAIL = process.env.EMAIL_USER || "gebreslassiedessie@gmail.com";
+const SENDER_NAME = "Ethiopian IT Park";
 
-// ─── Startup verification (helps debug env vars) ─────────
-(() => {
-  console.log("=== EMAIL CONFIGURATION ===");
-  console.log("EMAIL_USER:", process.env.EMAIL_USER || "❌ MISSING");
-  console.log(
-    "EMAIL_PASS length:",
-    process.env.EMAIL_PASS?.length || 0,
-    process.env.EMAIL_PASS?.length === 16 ? "✅ (16 chars)" : "⚠️ expected 16"
-  );
-  console.log(
-    "EMAIL_PASS has spaces:",
-    process.env.EMAIL_PASS?.includes(" ") ? "❌ YES (remove them!)" : "✅ NO"
-  );
-  console.log("===========================");
+// Startup debug — confirms key is loaded
+console.log("=== EMAIL CONFIGURATION ===");
+console.log(
+  "BREVO_API_KEY:",
+  BREVO_API_KEY ? `set (${BREVO_API_KEY.length} chars)` : "MISSING"
+);
+console.log("SENDER_EMAIL:", SENDER_EMAIL);
+console.log("===========================");
 
-  // Test SMTP connection on boot (optional — logs only, doesn't block)
-  transporter.verify((err) => {
-    if (err) {
-      console.error("❌ SMTP connection test FAILED:");
-      console.error("   Code:", err.code);
-      console.error("   Message:", err.message);
-    } else {
-      console.log("✅ SMTP ready — Gmail connection verified");
-    }
+// ─── Send email via Brevo HTTPS API (Port 443 — NOT blocked) ───
+async function sendEmailViaBrevo({ to, subject, htmlContent }) {
+  if (!BREVO_API_KEY) {
+    throw new Error("BREVO_API_KEY is not set in environment");
+  }
+
+  const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "api-key": BREVO_API_KEY,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      sender: { name: SENDER_NAME, email: SENDER_EMAIL },
+      to: [{ email: to }],
+      subject,
+      htmlContent,
+    }),
   });
-})();
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Brevo API ${response.status}: ${errorText}`);
+  }
+
+  return await response.json();
+}
 
 // ─── 1. Request Reset OTP ────────────────────────────────
 exports.requestReset = async (req, res) => {
@@ -56,7 +54,7 @@ exports.requestReset = async (req, res) => {
 
   try {
     const otp = PasswordReset.generateResetToken();
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
 
     const resetId = await PasswordReset.createOrUpdateResetToken(
       email,
@@ -64,14 +62,12 @@ exports.requestReset = async (req, res) => {
       expiresAt
     );
 
-    // Only send email if token was created/updated successfully
     if (resetId) {
       try {
-        await transporter.sendMail({
-          from: `Ethiopian IT Park <${process.env.EMAIL_USER}>`,
+        const result = await sendEmailViaBrevo({
           to: email,
           subject: "Your Password Reset OTP",
-          html: `
+          htmlContent: `
             <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto;">
               <h2 style="color: #007BFF;">Password Reset Request</h2>
               <p>Dear user,</p>
@@ -84,20 +80,14 @@ exports.requestReset = async (req, res) => {
             </div>
           `,
         });
-        console.log(`✅ OTP email sent to ${email}`);
+        console.log(`✅ OTP email sent to ${email}. Message ID: ${result.messageId}`);
       } catch (emailError) {
-        // Email failed but token exists — log and continue
-        // (User can't reset without OTP, but they'll know to try again)
         console.error("=== EMAIL SEND FAILED ===");
         console.error("  To:", email);
-        console.error("  Code:", emailError.code);
-        console.error("  Message:", emailError.message);
-        console.error("  Full:", emailError);
+        console.error("  Error:", emailError.message);
         console.error("=========================");
-
         return res.status(500).json({
-          message:
-            "Could not send OTP email. Check your email address or try again later.",
+          message: "Could not send OTP email. Please try again later.",
         });
       }
     }
@@ -107,9 +97,7 @@ exports.requestReset = async (req, res) => {
     });
   } catch (error) {
     console.error("Error in requestReset:", error);
-    res
-      .status(500)
-      .json({ message: "Internal server error. Please try again." });
+    res.status(500).json({ message: "Internal server error. Please try again." });
   }
 };
 
@@ -123,11 +111,9 @@ exports.verifyOtp = async (req, res) => {
 
   try {
     const isValid = await PasswordReset.verifyOtp(email, otp);
-
     if (!isValid) {
       return res.status(400).json({ message: "Invalid or expired OTP." });
     }
-
     res.status(200).json({ message: "OTP verified successfully." });
   } catch (error) {
     console.error("Error in verifyOtp:", error);
@@ -140,31 +126,27 @@ exports.resetPassword = async (req, res) => {
   const { email, newPassword } = req.body;
 
   if (!email || !newPassword) {
-    return res
-      .status(400)
-      .json({ message: "Email and new password are required." });
+    return res.status(400).json({
+      message: "Email and new password are required.",
+    });
   }
 
   if (newPassword.length < 6) {
-    return res
-      .status(400)
-      .json({ message: "Password must be at least 6 characters." });
+    return res.status(400).json({
+      message: "Password must be at least 6 characters.",
+    });
   }
 
   try {
     const updated = await PasswordReset.updatePassword(email, newPassword);
-
     if (!updated) {
-      return res
-        .status(400)
-        .json({ message: "User not found or password update failed." });
+      return res.status(400).json({
+        message: "User not found or password update failed.",
+      });
     }
-
     res.status(200).json({ message: "Password updated successfully." });
   } catch (error) {
     console.error("Error in resetPassword:", error);
-    res
-      .status(500)
-      .json({ message: "Password reset failed. Please try again." });
+    res.status(500).json({ message: "Password reset failed. Please try again." });
   }
 };
